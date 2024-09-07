@@ -7,6 +7,7 @@ from threading import Thread
 import os
 from screeninfo import get_monitors
 
+
 ###nur hauptscreen verwenden und ggf anpassen 
 def get_primary_monitor():
     for m in get_monitors():
@@ -14,16 +15,20 @@ def get_primary_monitor():
             return m
     return None
 
+scaling_factor = 2  # Manuell für Retina Displays
+
 def move_cursor_within_primary(x, y):
     primary_monitor = get_primary_monitor()
     if primary_monitor:
-        adjusted_x = primary_monitor.x + x
-        adjusted_y = primary_monitor.y + y
-        adjusted_x = max(primary_monitor.x, min(adjusted_x, primary_monitor.x + primary_monitor.width))
-        adjusted_y = max(primary_monitor.y, min(adjusted_y, primary_monitor.y + primary_monitor.height))
+        # Anpassen der Koordinaten basierend auf dem DPI-Skalierungsfaktor
+        x *= scaling_factor
+        y *= scaling_factor
+
+        # Verschiebe innerhalb der Grenzen des primären Monitors
+        adjusted_x = primary_monitor.x + max(0, min(x, primary_monitor.width))
+        adjusted_y = primary_monitor.y + max(0, min(y, primary_monitor.height))
         pyautogui.moveTo(adjusted_x, adjusted_y)
-    else:
-        print("No primary monitor found; cannot move cursor.")
+
 class FishingAgent:
     def __init__(self, main_agent)-> None: 
         self.main_agent = main_agent 
