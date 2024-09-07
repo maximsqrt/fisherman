@@ -15,7 +15,7 @@ def get_primary_monitor():
             return m
     return None
 
-scaling_factor = 2  # Manuell für Retina Displays
+scaling_factor = 1  # Manuell für Retina Displays
 
 def move_cursor_within_primary(x, y):
     primary_monitor = get_primary_monitor()
@@ -42,25 +42,41 @@ class FishingAgent:
         self.find_lure()
 
     def find_lure(self):
-        if self.main_agent.cur_img is not None:
-            cur_img = self.main_agent.cur_img
-            lure_location = cv.matchTemplate(
-                cur_img, 
-                self.fishing_target,
-                cv.TM_CCOEFF_NORMED)
-        lure_loc_arr = np.array(lure_location)
+     if self.main_agent.cur_img is not None:
+        cur_img = self.main_agent.cur_img
+        lure_location = cv.matchTemplate(
+            cur_img, 
+            self.fishing_target,
+            cv.TM_CCOEFF_NORMED)
+        min_val, max_val, min_loc, max_loc = cv.minMaxLoc(lure_location)
+        
+        # Ergebnisbild für die Darstellung
+        result_img = cur_img.copy()
 
-        min_val, max_val, min_loc, max_loc = cv.minMaxLoc(lure_loc_arr)
-        print(max_loc)
-        self.move_to_lure(max_loc)
+        # Berechnung der Position des Rechtecks
+        top_left = max_loc
+        bottom_right = (top_left[0] + self.fishing_target.shape[1], top_left[1] + self.fishing_target.shape[0])
 
-        #cv.imshow("Match Template", lure_loc_arr)
-        #cv.waitKey(0)
+        # Zeichnen eines Rechtecks um den gefundenen Bereich
+        cv.rectangle(result_img, top_left, bottom_right, (0, 255, 0), 2)
+
+        # Markieren des Zentrums
+        center = (top_left[0] + (bottom_right[0] - top_left[0]) // 2, top_left[1] + (bottom_right[1] - top_left[1]) // 2)
+        cv.drawMarker(result_img, center, (0, 0, 255), cv.MARKER_CROSS, markerSize=20, thickness=2)
+
+        # Anzeigen des Ergebnisses
+        cv.imshow("Match Template", result_img)
+        cv.waitKey(0)
+        print("Max location:", max_loc)
+        print("Center location:", center)
+        self.move_to_lure(center)
+
+
         
         
-    def move_to_lure(self, max_loc):
+    def move_to_lure(self, center_loc):
     # max_loc ist ein Tupel (x, y)
-        pyautogui.moveTo(max_loc[0], max_loc[1])  # Tupel wird entpackt zu x und y
+        move_cursor_within_primary(center_loc[0], center_loc[1])  # Tupel wird entpackt zu x und y
 
 
     def watch_lure(self):
@@ -72,3 +88,4 @@ class FishingAgent:
         while True:
             self.cast_lure()
             time.sleep(5)
+
