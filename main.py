@@ -3,6 +3,7 @@ import cv2 as cv
 import time
 import mss
 from threading import Thread
+from fishing.fishing_agent import FishingAgent
 
 shared_screenshot = None
 
@@ -25,6 +26,8 @@ def update_screen(agent):
     with mss.mss() as sct:
         monitor = sct.monitors[1]
         t0 = time.time()
+        fps_report_delay = 5
+        fps_report_time = time.time()
         while True:
             # Bildschirm aufnehmen
             agent.cur_img = np.array(sct.grab(monitor))
@@ -36,9 +39,11 @@ def update_screen(agent):
             agent.cur_imgHSV = cv.cvtColor(agent.cur_img, cv.COLOR_BGR2HSV)
             # FPS-Berechnung
             ex_time = time.time() - t0
-            print("fps: " + str(1 / ex_time))
+            if time.time() - fps_report_time >= fps_report_delay:
+                print("fps: " + str(1 / ex_time))
+                fps_report_time = time.time()
             t0 = time.time()
-
+            time.sleep(0.005)
 # Bildanzeige im Hauptthread
 def display_screen():
     global shared_screenshot
@@ -68,28 +73,27 @@ if __name__ == "__main__":
         user_input = str.lower(user_input).strip()
             
         if user_input == "s":
+               update_screen_thread = Thread(
+               target=update_screen, 
+               args=(main_agent,),
+               name="update_screen_thread",
+               daemon=True)
+               update_screen_thread.start()
+               print("Thread started")
+        elif user_input == "z":
             pass
-        if user_input == "z":
-            pass
-        if user_input == "f":
-            pass
-        if user_input == "q":
+        elif user_input == "f":
+            fishing_agent = FishingAgent(main_agent)
+            fishing_agent.run()
+        elif user_input == "q":
+            cv.destroyWindows()
             break
         else: 
             print("input error")
             print_menu()
     print("exiting app")
     # Thread für die update_screen-Funktion erstellen
-    update_screen_thread = Thread(
-        target=update_screen, 
-        args=(main_agent,),
-        name="update_screen_thread",
-        daemon=False  
-    )
-
-    # Starten des Bildschirmaufnahme-Threads
-    update_screen_thread.start()
-    print("Thread started")
+ 
 
     # Bildanzeige im Hauptthread
     display_screen()
