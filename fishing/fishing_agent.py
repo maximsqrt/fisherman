@@ -7,6 +7,10 @@ from threading import Thread
 import os
 from screeninfo import get_monitors
 
+import pyautogui
+
+screen_width, screen_height = pyautogui.size()
+print("Reported screen size:", screen_width, "x", screen_height)
 
 ###nur hauptscreen verwenden und ggf anpassen 
 def get_primary_monitor():
@@ -17,17 +21,8 @@ def get_primary_monitor():
 
 scaling_factor = 1  # Manuell für Retina Displays
 
-def move_cursor_within_primary(x, y):
-    primary_monitor = get_primary_monitor()
-    if primary_monitor:
-        # Anpassen der Koordinaten basierend auf dem DPI-Skalierungsfaktor
-        x *= scaling_factor
-        y *= scaling_factor
 
-        # Verschiebe innerhalb der Grenzen des primären Monitors
-        adjusted_x = primary_monitor.x + max(0, min(x, primary_monitor.width))
-        adjusted_y = primary_monitor.y + max(0, min(y, primary_monitor.height))
-        pyautogui.moveTo(adjusted_x, adjusted_y)
+
 
 class FishingAgent:
     def __init__(self, main_agent)-> None: 
@@ -36,53 +31,117 @@ class FishingAgent:
         self.fishing_thread = None
 
     def cast_lure(self):
-        print("Casting!...")
-        # pyautogui.press('1')
         time.sleep(2)
-        self.find_lure()
-
+        pyautogui.press('1')
+        print("Casting!...")
+        time.sleep(2)
+        center_loc = self.find_lure() #empty values == false like "" etc. 
+        if center_loc:
+            self.move_to_lure(center_loc)
+            self.watch_lure(center_loc)
+        else:
+            print("Lure nicht gefunden")
+        
     def find_lure(self):
      if self.main_agent.cur_img is not None:
         cur_img = self.main_agent.cur_img
+        template = self.fishing_target
+        
+        if cur_img.dtype != 'uint8':
+             cur_img = cur_img.astype('uint8')
+        if template.dtype != 'uint8':
+             template = template.astype('uint8')
+        
         lure_location = cv.matchTemplate(
             cur_img, 
             self.fishing_target,
             cv.TM_CCOEFF_NORMED)
         min_val, max_val, min_loc, max_loc = cv.minMaxLoc(lure_location)
-        
-        # Ergebnisbild für die Darstellung
-        result_img = cur_img.copy()
 
-        # Berechnung der Position des Rechtecks
+        # Berechne das Zentrum des gefundenen Bereichs
         top_left = max_loc
-        bottom_right = (top_left[0] + self.fishing_target.shape[1], top_left[1] + self.fishing_target.shape[0])
+        w, h = self.fishing_target.shape[1], self.fishing_target.shape[0]
+        bottom_right = (top_left[0] + w, top_left[1] + h)
+        center_x = top_left[0] + w // 2
+        center_y = top_left[1] + h // 2
+        center_loc = (center_x, center_y)
 
-        # Zeichnen eines Rechtecks um den gefundenen Bereich
-        cv.rectangle(result_img, top_left, bottom_right, (0, 255, 0), 2)
+        # Ergebnisbild für die Darstellung
+        #result_img = cur_img.copy()
 
-        # Markieren des Zentrums
-        center = (top_left[0] + (bottom_right[0] - top_left[0]) // 2, top_left[1] + (bottom_right[1] - top_left[1]) // 2)
-        cv.drawMarker(result_img, center, (0, 0, 255), cv.MARKER_CROSS, markerSize=20, thickness=2)
+        # # Zeichnen eines Rechtecks um den gefundenen Bereich
+        # cv.rectangle(result_img, top_left, bottom_right, (0, 255, 0), 2)
 
-        # Anzeigen des Ergebnisses
-        cv.imshow("Match Template", result_img)
-        cv.waitKey(0)
-        print("Max location:", max_loc)
-        print("Center location:", center)
-        self.move_to_lure(center)
+        # # Markieren des Zentrums
+        # cv.drawMarker(result_img, center_loc, (0, 0, 255), cv.MARKER_CROSS, markerSize=20, thickness=2)
+        # print("Max location:", max_loc)
+        # print("Center location:", center_loc)
+        # # Anzeigen des Ergebnisses
+        # cv.imshow("Match Template", result_img)
+        # cv.waitKey(0)  # Warte auf eine Taste
+        # cv.destroyAllWindows()  # Schließe das Fenster
 
+        print("max location:", max_loc)
+        print("center location:", center_loc)
+        print("center_loc returned")
+        return center_loc  # Gib die berechneten Koordinaten zurück
+     else:
+        print("no lure detected")
+        return None
 
-        
-        
     def move_to_lure(self, center_loc):
-    # max_loc ist ein Tupel (x, y)
-        move_cursor_within_primary(center_loc[0], center_loc[1])  # Tupel wird entpackt zu x und y
+        duration = .1
+        if center_loc:
+            # Skalierungsverhältnis berechnen, basierend auf der Diskrepanz zwischen Screenshot- und Bildschirmauflösung
+            scale_x = 1512 / 3024  # Bildschirmbreite / Screenshotbreite
+            scale_y = 982 / 1964   # Bildschirmhöhe / Screenshothöhe
+
+            # Koordinaten anpassen
+            adjusted_x = int(center_loc[0] * scale_x)
+            adjusted_y = int(center_loc[1] * scale_y)
+
+            # Bewegen des Mauszeigers zu den angepassten Koordinaten
+            pyautogui.moveTo(adjusted_x, adjusted_y,duration=duration, tween=pyautogui.easeOutQuad)
+            time.sleep(.5)
+            self.watch_lure(center_loc)
+            print(f"cursor moved to ({adjusted_x}, {adjusted_y})")
+        else:
+            print("no valid cords found")
 
 
-    def watch_lure(self):
-        pass
+
+
+
+    def watch_lure(self, center_loc):
+        time.sleep(3)
+        initial_image = self.main_agent.cur_imgHSV
+        watch_time = time.time()
+        bite_detected = False  # Zustandsvariable zur Überwachung der Biss-Erkennung
+
+        while True:
+            current_image = self.main_agent.cur_imgHSV
+            pixel_change = cv.absdiff(initial_image[center_loc[1], center_loc[0]], current_image[center_loc[1], center_loc[0]])
+
+            if np.sum(pixel_change) > 130:  # Schwelle für Biss-Erkennung
+                print("bite detected")
+                bite_detected = True
+                break  # Schleife verlassen, nachdem Biss erkannt wurde
+            
+            if time.time() - watch_time > 20:  # Timeout-Prüfung -one Period 30sec
+                print("fishing timeout")
+                break  # Schleife verlassen, nachdem Timeout erreicht ist
+
+        if bite_detected or (time.time() - watch_time > 10):  # Prüfung, ob Bedingungen zum Beenden erfüllt wurden
+            self.pull_line()  # Linie ziehen, nur einmal nach der Schleife
+
+
+                
     def pull_line(self):
-        pass
+        print("pulling line")
+        pyautogui.rightClick()  # Simuliert das Einholen der Leine durch einen Rechtsklick
+        time.sleep(1)  # Pausiert für 1 Sekunde nach dem Einholen der Leine
+        self.cast_lure()  # Startet den Wurfprozess erneut
+
 
     def run(self):
         while True:
