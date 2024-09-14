@@ -14,20 +14,29 @@ import faulthandler
 faulthandler.enable()
 
 
+def list_audio_devices(self):
+    num_devices = self.p.get_device_count()
+    for i in range(num_devices):
+        dev_info = self.p.get_device_info_by_index(i)
+        print(f"Device {i}: {dev_info.get('name')}")
+
+# Right Device? 
+logging.debug("Opening audio stream...")
+# PyAudio operations
+logging.debug("Audio stream opened successfully.")
 
 
 screen_width, screen_height = pyautogui.size()
 print("Reported screen size:", screen_width, "x", screen_height)
 
-###nur hauptscreen verwenden und ggf anpassen 
+### Use only mainscreen 
 def get_primary_monitor():
     for m in get_monitors():
         if m.is_primary:
             return m
     return None
 
-scaling_factor = 1  # Manuell für Retina Displays
-
+scaling_factor = 1  # Manuell for Retina :( )
 
 
 
@@ -42,7 +51,7 @@ class FishingAgent:
         self.format = pyaudio.paInt16
         self.channels = 2
         self.p = pyaudio.PyAudio()
-        self.device_index = 1  # BlackHole 2ch
+        self.device_index = 1  # BlackHole 2ch 
     
     
     
@@ -70,7 +79,7 @@ class FishingAgent:
         cur_img = self.main_agent.cur_img
         template = self.fishing_target
 
-        # Überprüfe und konvertiere Datentyp nur wenn nötig
+        # Check and Conv. Datatyp if nec. 
         if cur_img.dtype != 'uint8':
             cur_img = np.uint8(cur_img * 255) if cur_img.max() <= 1.0 else np.uint8(cur_img)
         if template.dtype != 'uint8':
@@ -99,15 +108,15 @@ class FishingAgent:
     def move_to_lure(self, center_loc):
         duration = .1
         if center_loc:
-            # Skalierungsverhältnis berechnen, basierend auf der Diskrepanz zwischen Screenshot- und Bildschirmauflösung
-            scale_x = 1512 / 3024  # Bildschirmbreite / Screenshotbreite
-            scale_y = 982 / 1964   # Bildschirmhöhe / Screenshothöhe
+            # Scaling Ratio based on the discrepancy between screenshot and screen resolution
+            scale_x = 1512 / 3024  # W / H 
+            scale_y = 982 / 1964   # W / H
 
             # Koordinaten anpassen
             adjusted_x = int(center_loc[0] * scale_x)
             adjusted_y = int(center_loc[1] * scale_y)
 
-            # Bewegen des Mauszeigers zu den angepassten Koordinaten
+            # MOVE CURSOR slighty fast, check later.. 
             pyautogui.moveTo(adjusted_x, adjusted_y,duration=duration, tween=pyautogui.easeOutQuad)
             time.sleep(.5)
             self.listen_for_bite()
@@ -120,54 +129,61 @@ class FishingAgent:
         watch_time = time.time()
 
         # Open PyAudio stream
-        stream = self.p.open(format=self.format,
-                             channels=self.channels,
-                             rate=self.sample_rate,
-                             input=True,
-                             input_device_index=self.device_index,
-                             frames_per_buffer=self.chunk)
+        try:
+            stream = self.p.open(format=self.format,
+                                channels=self.channels, 
+                                rate=self.sample_rate,
+                                input=True,
+                                input_device_index=self.device_index,
+                                frames_per_buffer=self.chunk)
+            print("Listening for bite...")
 
-        print("Listening for bite...")
+            while not bite_detected and time.time() - watch_time < 20:  # Timeout after 20 sec
+                # Read audio files 
+                data = stream.read(self.chunk, exception_on_overflow=False)
+                current_sound = np.frombuffer(data, dtype=np.int16)
+                current_sound = AudioSegment(
+                    current_sound.tobytes(), 
+                    sample_width=2, 
+                    frame_rate=self.sample_rate, 
+                    channels=self.channels
+                )
 
-        while not bite_detected and time.time() - watch_time < 20:  # Timeout nach 20 Sekunden
-            # Lese Audio-Daten
-            data = stream.read(self.chunk)
-            current_sound = np.frombuffer(data, dtype=np.int16)
-            current_sound = AudioSegment(
-                current_sound.tobytes(), 
-                sample_width=2, 
-                frame_rate=self.sample_rate, 
-                channels=self.channels
-            )
+                # Compare Actual Sound to template 
+                correlation = self.compare_sounds(self.bite_sound, current_sound)
+                if correlation > 0.9:  # Thresh.
+                    print("Bite detected!")
+                    bite_detected = True
 
-            # Vergleiche den aktuellen Sound mit dem Biss-Sound
-            correlation = self.compare_sounds(self.bite_sound, current_sound)
-            if correlation > 0.9:  # Schwellenwert für Korrelation
-                print("Bite detected!")
-                bite_detected = True
-                self.pull_line()
-                break
+        except Exception as e:
+            logging.error(f"Error during audio processing: {e}")
 
-        # Stoppe und schließe den Stream
-        stream.stop_stream()
-        stream.close()
-        self.p.terminate()
+        finally:
+            # Ensure the stream is closed properly
+            if stream:
+                stream.stop_stream()
+                stream.close()
+                self.p.terminate()
+
+        if bite_detected:
+            self.pull_line()
+
 
     def compare_sounds(self, sound1, sound2):
-        # Konvertiere AudioSegment in numpy Array
+        # Convert Audio in Array
         sound1_data = np.array(sound1.get_array_of_samples())
         sound2_data = np.array(sound2.get_array_of_samples())
 
-        # Berechne Kreuzkorrelation
+        # Berechne Cross-Correlation
         correlation = np.max(correlate(sound1_data, sound2_data, mode='valid'))
         return correlation
 
                 
     def pull_line(self):
         print("pulling lure")
-        pyautogui.rightClick()  # Simuliert das Einholen der Leine durch einen Rechtsklick
-        time.sleep(1)  # Pausiert für 1 Sekunde nach dem Einholen der Leine
-        self.cast_lure()  # Startet den Wurfprozess erneut
+        pyautogui.rightClick()  #Pull "fish"
+        time.sleep(.2)  # short pause 
+        self.cast_lure()  # cast lure again
 
 
     def run(self):

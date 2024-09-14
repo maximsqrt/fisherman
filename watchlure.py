@@ -1,8 +1,8 @@
 
-############### falls audio nicht klappt ... 
+############### keep in case audio str wont work ... 
 # def pull_line():
     #     print("Linie wird gezogen!")
-        # Hier kannst du die gewünschte Aktion ausführen
+        
 
         # def watch_lure(self, center_loc):
         #     time.sleep(3)
@@ -25,3 +25,19 @@
 
         #     if bite_detected or (time.time() - watch_time > 10):  # Prüfung, ob Bedingungen zum Beenden erfüllt wurden
         #         self.pull_line()  # Linie ziehen, nur einmal nach der Schleife
+        
+import pyaudio
+
+def test_audio():
+    p = pyaudio.PyAudio()
+    try:
+        stream = p.open(format=pyaudio.paInt16, channels=2, rate=48000, input=True, frames_per_buffer=2048)
+        print("Stream opened successfully.")
+        stream.close()
+    except Exception as e:
+        print(f"Failed to open stream: {e}")
+    finally:
+        p.terminate()
+
+if __name__ == "__main__":
+    test_audio()
