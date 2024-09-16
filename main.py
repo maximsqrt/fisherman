@@ -22,7 +22,7 @@ logging.basicConfig(
 
 logging.debug("Logging im Hauptprojekt ist nun aktiv.")
 print("Logging sollte jetzt aktiv sein. Überprüfe die Datei:", log_path)
-
+import gc
 import numpy as np
 import cv2 as cv
 import time
@@ -31,7 +31,7 @@ from threading import Thread, Lock
 from fishing.fishing_agent import FishingAgent
 import logging
 from memory_profiler import memory_usage
-# Configure logging
+# Configure logging1
 
 
 
@@ -89,17 +89,25 @@ def update_screen(agent):
             agent.set_cur_img(shared_screenshot)
             agent.set_cur_imgHSV(screenshot_hsv)
 
+            del screenshot
+            del shared_screenshot
+            del screenshot_hsv
+
+            # Garbage Collector aufrufen
+            gc.collect()
             # Calculate the execution time for performance monitoring
             ex_time = time.time() - t0  # Time since last frame
-            current_memory = memory_usage()[0] - initial_memory[0]  # Memory used since start
+            #Check if Segm.Fault comes from this usage
+            #current_memory = memory_usage()[0] - initial_memory[0]  # Memory used since start
 
             # Report FPS every 5 seconds
             if time.time() - fps_report_time >= fps_report_delay:
                 if ex_time > 0:
                     print(f"FPS: {1 / ex_time:.2f}")
                 fps_report_time = time.time()
-            # print(f"Execution time: {ex_time:.2f} seconds")
-            # print(f"Memory used: {current_memory:.2f} MiB")
+            #print(f"Execution time: {ex_time:.2f} seconds")
+            #f
+            #print(f"Memory used: {current_memory:.2f} MiB")
             # Reset the timer for the next frame
             t0 = time.time()
             time.sleep(0.005)  # Small sleep to prevent excessive CPU usage

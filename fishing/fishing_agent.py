@@ -12,7 +12,7 @@ from scipy.signal import correlate
 import logging
 import faulthandler
 faulthandler.enable()
-
+import gc
 
 def list_audio_devices(self):
     num_devices = self.p.get_device_count()
@@ -65,7 +65,7 @@ class FishingAgent:
         print(center_loc)
         if center_loc:
             self.move_to_lure(center_loc)
-            self.listen_for_bite()
+            #no listen_for_bite in cast_lure
         else:
             print("Lure nicht gefunden")
         
@@ -96,7 +96,7 @@ class FishingAgent:
             _, max_val, _, max_loc = cv.minMaxLoc(result)
             logging.debug(f"MatchTemplate max_val: {max_val}, max_loc: {max_loc}")
 
-            if max_val < 0.8:
+            if max_val < 0.6:
                 logging.debug("Lure not found, max correlation value below threshold.")
                 return None
 
@@ -135,22 +135,28 @@ class FishingAgent:
         else:
             print("no valid cords found")
 
+    #initialise pyaudio.PyAudio in listen_for_bite 
     def listen_for_bite(self):
         bite_detected = False
         watch_time = time.time()
 
-        # Open PyAudio stream
+        # Initialize variables
+        p = None
+        stream = None
+
         try:
-            stream = self.p.open(format=self.format,
-                                channels=self.channels, 
-                                rate=self.sample_rate,
-                                input=True,
-                                input_device_index=self.device_index,
-                                frames_per_buffer=self.chunk)
+            p = pyaudio.PyAudio()  # Create the PyAudio instance here
+            stream = p.open(format=self.format,
+                            channels=self.channels, 
+                            rate=self.sample_rate,
+                            input=True,
+                            input_device_index=self.device_index,
+                            frames_per_buffer=self.chunk)
+            logging.debug("Audio stream opened successfully.")
             print("Listening for bite...")
 
-            while not bite_detected and time.time() - watch_time < 20:  # Timeout after 20 sec
-                # Read audio files 
+            while not bite_detected and time.time() - watch_time < 20:  # Timeout after 20 seconds
+                # Read audio data
                 data = stream.read(self.chunk, exception_on_overflow=False)
                 current_sound = np.frombuffer(data, dtype=np.int16)
                 current_sound = AudioSegment(
@@ -160,34 +166,69 @@ class FishingAgent:
                     channels=self.channels
                 )
 
-                # Compare Actual Sound to template 
-                correlation = self.compare_sounds(self.bite_sound, current_sound)
-                if correlation > 0.9:  # Thresh.
-                    print("Bite detected!")
-                    bite_detected = True
+                # Initialize correlation to None
+                correlation = None
+
+                try:
+                    # Compare current sound to bite sound
+                    correlation = self.compare_sounds(self.bite_sound, current_sound)
+                    logging.debug(f"Correlation value: {correlation}")
+                    
+                    # Protokolliere den Korrelationswert in eine Datei oder Konsole
+                    with open("correlation_values.txt", "a") as f:
+                        f.write(f"{time.time()},{correlation},{bite_detected}\n")
+
+                except Exception as e:
+                    logging.error(f"Error comparing sounds: {e}")
+                    continue  # Skip to the next iteration
+
+                if correlation is not None and correlation > 0.1:  # Temporär Schwellenwert auf 0 setzen, um alle Werte zu erfassen
+                    print(f"Correlation value: {correlation}")
+                    # Noch nicht auf Bite detected setzen
 
         except Exception as e:
             logging.error(f"Error during audio processing: {e}")
 
         finally:
             # Ensure the stream is closed properly
-            if stream:
+            if stream is not None:
                 stream.stop_stream()
                 stream.close()
-                self.p.terminate()
+            if p is not None:
+                p.terminate()
+                logging.debug("Audio stream closed.")
 
-        if bite_detected:
-            self.pull_line()
+        # Entferne vorübergehend das automatische Ziehen der Angel, um Fehlalarme zu vermeiden
+        # if bite_detected:
+        #     self.pull_line()
+
+
 
 
     def compare_sounds(self, sound1, sound2):
-        # Convert Audio in Array
-        sound1_data = np.array(sound1.get_array_of_samples())
-        sound2_data = np.array(sound2.get_array_of_samples())
+        # Konvertiere Audio in Arrays
+        sound1_data = np.array(sound1.get_array_of_samples()).astype(np.float32)
+        sound2_data = np.array(sound2.get_array_of_samples()).astype(np.float32)
 
-        # Berechne Cross-Correlation
-        correlation = np.max(correlate(sound1_data, sound2_data, mode='valid'))
+        # Sicherstellen, dass beide Arrays die gleiche Länge haben
+        min_len = min(len(sound1_data), len(sound2_data))
+        sound1_data = sound1_data[:min_len]
+        sound2_data = sound2_data[:min_len]
+
+        # Berechne die normierte Kreuzkorrelation
+        numerator = np.correlate(sound1_data, sound2_data, mode='valid')[0]
+        denominator = np.sqrt(np.correlate(sound1_data, sound1_data, mode='valid')[0] * np.correlate(sound2_data, sound2_data, mode='valid')[0])
+        if denominator == 0:
+            return 0
+        correlation = numerator / denominator
+
         return correlation
+
+
+
+
+
+    
 
                 
     def pull_line(self):
