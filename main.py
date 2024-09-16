@@ -2,9 +2,26 @@
 ##   __  
 ## >(o )___ 
 ##  (   .  ) 
-##~~~~~~~~~~~
+##~~~~~~~~~~~1
+import logging
+import os
+print("Current working directory:", os.getcwd())
 
 
+
+# Übernimm genau diese Konfiguration
+log_filename = 'app.log'
+log_path = os.path.join(os.getcwd(), log_filename)  # Überprüfe und stelle sicher, dass das Verzeichnis korrekt ist
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filename=log_path,
+    filemode='w'
+)
+
+logging.debug("Logging im Hauptprojekt ist nun aktiv.")
+print("Logging sollte jetzt aktiv sein. Überprüfe die Datei:", log_path)
 
 import numpy as np
 import cv2 as cv
@@ -13,9 +30,12 @@ import mss
 from threading import Thread, Lock
 from fishing.fishing_agent import FishingAgent
 import logging
-
+from memory_profiler import memory_usage
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
+
+
 
 shared_screenshot = None
 
@@ -30,28 +50,60 @@ class MainAgent:
         self.time = "night"
         print("MainAgent setup complete...")
 
+    def get_cur_img(self):
+        with self.lock:
+            return self._cur_img if self._cur_img is not None else None
+
+    def get_cur_imgHSV(self):
+        with self.lock:
+            return self._cur_imgHSV if self._cur_imgHSV is not None else None
+
+    def set_cur_img(self, img):
+        with self.lock:
+            self._cur_img = img
+
+    def set_cur_imgHSV(self, img):
+        with self.lock:
+            self._cur_imgHSV = img
+
 def update_screen(agent):
-    global shared_screenshot
     with mss.mss() as sct:
-        monitor = sct.monitors[1]
+        monitor = sct.monitors[1]  # Monitor index might need to be adjusted based on your setup
         t0 = time.time()
-        fps_report_delay = 5
+        initial_memory = memory_usage()  # Measure initial memory usage
         fps_report_time = time.time()
+        fps_report_delay = 5  # Interval in seconds to report FPS
+
         while True:
-            with agent.lock:
-                agent.cur_img = np.array(sct.grab(monitor))
-                if agent.cur_img.size == 0:
-                    print("Screenshot is invalid")
-                    continue
-            shared_screenshot = cv.cvtColor(agent.cur_img, cv.COLOR_BGRA2BGR)
-            agent.cur_img = shared_screenshot
-            agent.cur_imgHSV = cv.cvtColor(agent.cur_img, cv.COLOR_BGR2HSV)
-            ex_time = time.time() - t0
+            screenshot = np.array(sct.grab(monitor))
+            if screenshot.size == 0:
+                print("Screenshot is invalid")
+                continue
+            
+            # Convert the screenshot to BGR format
+            shared_screenshot = cv.cvtColor(screenshot, cv.COLOR_BGRA2BGR)
+            # Convert the BGR image to HSV format
+            screenshot_hsv = cv.cvtColor(shared_screenshot, cv.COLOR_BGR2HSV)
+
+            # Use setter methods to update the images in the main agent
+            agent.set_cur_img(shared_screenshot)
+            agent.set_cur_imgHSV(screenshot_hsv)
+
+            # Calculate the execution time for performance monitoring
+            ex_time = time.time() - t0  # Time since last frame
+            current_memory = memory_usage()[0] - initial_memory[0]  # Memory used since start
+
+            # Report FPS every 5 seconds
             if time.time() - fps_report_time >= fps_report_delay:
-                print("fps: " + str(1 / ex_time))
+                if ex_time > 0:
+                    print(f"FPS: {1 / ex_time:.2f}")
                 fps_report_time = time.time()
+            # print(f"Execution time: {ex_time:.2f} seconds")
+            # print(f"Memory used: {current_memory:.2f} MiB")
+            # Reset the timer for the next frame
             t0 = time.time()
-            time.sleep(0.005)
+            time.sleep(0.005)  # Small sleep to prevent excessive CPU usage
+
 
 def display_screen():
     global shared_screenshot, main_agent
@@ -124,6 +176,7 @@ def user_input_handler(main_agent):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
     main_agent = MainAgent()
     update_screen_thread = Thread(target=update_screen, args=(main_agent,), daemon=True)
     update_screen_thread.start()

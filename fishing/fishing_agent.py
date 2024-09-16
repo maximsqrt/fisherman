@@ -61,7 +61,8 @@ class FishingAgent:
         pyautogui.press('1')
         print("Casting!...")
         time.sleep(2)
-        center_loc = self.find_lure() #empty values == false like "" etc. 
+        center_loc = self.find_lure() #empty values == false like "" etc. 1
+        print(center_loc)
         if center_loc:
             self.move_to_lure(center_loc)
             self.listen_for_bite()
@@ -72,35 +73,45 @@ class FishingAgent:
     
         
     def find_lure(self):
-        if self.main_agent.cur_img is None or self.fishing_target is None:
-            logging.error("Image or template is None.")
+        if self.main_agent.get_cur_img() is None or self.fishing_target is None:
+            logging.error("Current image or fishing target template is not available.")
             return None
 
-        cur_img = self.main_agent.cur_img
-        template = self.fishing_target
+        cur_img = self.main_agent.get_cur_img()
+        logging.debug(f"Original image dtype: {cur_img.dtype}, shape: {cur_img.shape}, max value: {cur_img.max()}")
 
-        # Check and Conv. Datatyp if nec. 
+        # Ensure both images are in the correct data type and scale
         if cur_img.dtype != 'uint8':
             cur_img = np.uint8(cur_img * 255) if cur_img.max() <= 1.0 else np.uint8(cur_img)
-        if template.dtype != 'uint8':
-            template = np.uint8(template * 255) if template.max() <= 1.0 else np.uint8(template)
+        if self.fishing_target.dtype != 'uint8':
+            self.fishing_target = np.uint8(self.fishing_target * 255) if self.fishing_target.max() <= 1.0 else np.uint8(self.fishing_target)
 
+        logging.debug(f"Converted image dtype: {cur_img.dtype}, shape: {cur_img.shape}")
+        
+
+        # Apply template matching to find the lure
+           
         try:
-            lure_location = cv.matchTemplate(cur_img, template, cv.TM_CCOEFF_NORMED)
-            min_val, max_val, min_loc, max_loc = cv.minMaxLoc(lure_location)
-            
+            result = cv.matchTemplate(cur_img, self.fishing_target, cv.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv.minMaxLoc(result)
+            logging.debug(f"MatchTemplate max_val: {max_val}, max_loc: {max_loc}")
+
+            if max_val < 0.8:
+                logging.debug("Lure not found, max correlation value below threshold.")
+                return None
+
             top_left = max_loc
-            w, h = template.shape[1], template.shape[0]
+            w, h = self.fishing_target.shape[1], self.fishing_target.shape[0]
             center_x = top_left[0] + w // 2
             center_y = top_left[1] + h // 2
             center_loc = (center_x, center_y)
 
-            logging.debug(f"Max location: {max_loc}")
-            logging.debug(f"Center location: {center_loc}")
+            logging.debug(f"Lure found at position: {center_loc} with max correlation value: {max_val}")
             return center_loc
         except Exception as e:
-            logging.error(f"Error during matchTemplate: {e}")
+            logging.error(f"Error during template matching: {e}")
             return None
+
 
 
     

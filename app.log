@@ -1,0 +1,10 @@
+2024-09-16 13:05:52,696 - DEBUG - Logging im Hauptprojekt ist nun aktiv.
+2024-09-16 13:05:53,295 - DEBUG - Opening audio stream...
+2024-09-16 13:05:53,295 - DEBUG - Audio stream opened successfully.
+2024-09-16 13:05:53,316 - DEBUG - Starting display_screen loop.
+2024-09-16 13:05:53,316 - DEBUG - No screenshot available to display.
+2024-09-16 13:06:00,639 - DEBUG - subprocess.call(['ffmpeg', '-y', '-i', '/Users/magnus/Documents/fishersfritz/bitesound.m4a', '-acodec', 'pcm_s16le', '-vn', '-f', 'wav', '-'])
+2024-09-16 13:06:05,321 - DEBUG - Original image dtype: uint8, shape: (1964, 3024, 3), max value: 255
+2024-09-16 13:06:05,321 - DEBUG - Converted image dtype: uint8, shape: (1964, 3024, 3)
+2024-09-16 13:06:06,581 - DEBUG - MatchTemplate max_val: 0.6854828596115112, max_loc: (1295, 499)
+2024-09-16 13:06:06,581 - DEBUG - Lure not found, max correlation value below threshold.
